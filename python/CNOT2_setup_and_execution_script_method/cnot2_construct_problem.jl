@@ -3,7 +3,6 @@ println("Setup for ", eval_lab ? "lab frame evaluation" : "rotating frame optimi
 Ne = [Ne1, Ne2]
 Ng = [Ng1, Ng2]
 
-N = Ne1*Ne2; # Total number of nonpenalized energy levels
 Ntot = (Ne1+Ng1)*(Ne2+Ng2)
 Nguard = Ntot - N # total number of guard states
 
