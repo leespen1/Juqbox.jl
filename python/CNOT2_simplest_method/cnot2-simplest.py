@@ -2,7 +2,7 @@ import numpy as np
 from juliacall import Main as jl
 
 # Run CNOT2 setup on the Julia side
-jl.include("../examples/cnot2-setup.jl")
+jl.include("../../examples/cnot2-setup.jl")
 # Now the global variables/functions from that script can be accessed using the
 # syntax `jl.VariableName`.
 
