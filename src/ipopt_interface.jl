@@ -7,7 +7,6 @@
 
 #     nele_jac ::Int64 # number of elements in constraint Jacobian
 #     nele_hess ::Int64 # number of elements in the constrint Hessian
-#     jacob_approx ::String # Jacobian computation (either exact or finite-difference-values)
 #     hessian_approx ::String # Hessian computation (either exact or limited-memory)
 
 #     x_L ::Array{Float64,1} # lower bound for design variables
@@ -21,8 +20,7 @@
 
 
 
-function eval_f_g_grad!(pcof::Vector{Float64},params:: Juqbox.objparams, wa::Working_Arrays,
-                       nodes::AbstractArray=[0.0], weights::AbstractArray=[1.0], compute_adjoint::Bool=true)
+function eval_f_g_grad!(pcof::Vector{Float64}, params:: Juqbox.objparams, nodes::AbstractArray=[0.0], weights::AbstractArray=[1.0], compute_adjoint::Bool=true)
 
     params.last_pcof .= pcof
     params.last_infidelity = 0.0
@@ -44,7 +42,7 @@ function eval_f_g_grad!(pcof::Vector{Float64},params:: Juqbox.objparams, wa::Wor
         end
 
         if compute_adjoint
-            _, totalgrad, primaryobjf, secondaryobjf, traceInfidelity, infidelitygrad, leakgrad = Juqbox.traceobjgrad(pcof,params,wa,false,compute_adjoint)
+            _, totalgrad, primaryobjf, secondaryobjf, traceInfidelity, infidelitygrad, leakgrad = Juqbox.traceobjgrad(pcof, params, false, compute_adjoint)
             for j in 1:length(infidelitygrad)
                 params.last_infidelity_grad[j] += infidelitygrad[j]*weights[i]
             end
@@ -52,7 +50,7 @@ function eval_f_g_grad!(pcof::Vector{Float64},params:: Juqbox.objparams, wa::Wor
                 params.last_leak_grad[j] += leakgrad[j]*weights[i]
             end
         else
-            _, primaryobjf, secondaryobjf = Juqbox.traceobjgrad(pcof,params,wa,false,compute_adjoint)
+            _, primaryobjf, secondaryobjf = Juqbox.traceobjgrad(pcof, params, false, compute_adjoint)
         end
 
         params.last_infidelity += primaryobjf[1]*weights[i]
@@ -72,18 +70,17 @@ end
 
 # setup callback functions for Ipopt
 
-# function eval_f_par(pcof::Vector{Float64},x_new:: Bool, params:: Juqbox.objparams, wa::Working_Arrays,
+# function eval_f_par(pcof::Vector{Float64},x_new:: Bool, params:: Juqbox.objparams,
 #                     nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
-function eval_f_par(pcof::Vector{Float64}, params:: Juqbox.objparams, wa::Working_Arrays,
+function eval_f_par(pcof::Vector{Float64}, params:: Juqbox.objparams,
     nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
-
 
     #Return last stored
     # if x_new 
     pnorm =norm(pcof .- params.last_pcof)     
     if pnorm > 1.0e-15
         compute_adjoint = true
-        eval_f_g_grad!(pcof,params,wa,nodes,weights,compute_adjoint)        
+        eval_f_g_grad!(pcof, params, nodes, weights, compute_adjoint)        
     end
 
     if params.objFuncType == 1
@@ -99,9 +96,9 @@ function eval_f_par(pcof::Vector{Float64}, params:: Juqbox.objparams, wa::Workin
   end
 
 
-# function eval_g_par(pcof::Vector{Float64},x_new:: Bool,g::Vector{Float64},params:: Juqbox.objparams, wa::Working_Arrays,
+# function eval_g_par(pcof::Vector{Float64},x_new:: Bool,g::Vector{Float64},params:: Juqbox.objparams,
 #                     nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
-function eval_g_par(pcof::Vector{Float64},g::Vector{Float64},params:: Juqbox.objparams, wa::Working_Arrays,
+function eval_g_par(pcof::Vector{Float64}, g::Vector{Float64}, params:: Juqbox.objparams,
     nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
 
     #Return last stored
@@ -109,7 +106,7 @@ function eval_g_par(pcof::Vector{Float64},g::Vector{Float64},params:: Juqbox.obj
     pnorm =norm(pcof .- params.last_pcof) 
     if pnorm > 1.0e-15
         compute_adjoint = true
-        eval_f_g_grad!(pcof,params,wa,nodes,weights,compute_adjoint)
+        eval_f_g_grad!(pcof, params, nodes, weights, compute_adjoint)
     end
     
     g[1] = params.last_leak
@@ -119,17 +116,18 @@ end
 
 
 
-# function eval_grad_f_par(pcof::Vector{Float64},x_new:: Bool, grad_f::Vector{Float64}, params:: Juqbox.objparams, wa::Working_Arrays,
-#                         nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
-function eval_grad_f_par(pcof::Vector{Float64}, grad_f::Vector{Float64}, params:: Juqbox.objparams, wa::Working_Arrays,
+# function eval_grad_f_par(pcof::Vector{Float64},x_new:: Bool, grad_f::Vector{Float64}, params:: Juqbox.objparams, nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
+function eval_grad_f_par(pcof::Vector{Float64}, grad_f::Vector{Float64}, params:: Juqbox.objparams,
     nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
     
+    wa = params.wa
+
     #Return last stored
     # if x_new 
     pnorm =norm(pcof .- params.last_pcof) 
     if pnorm > 1.0e-15
         compute_adjoint = true
-        eval_f_g_grad!(pcof,params,wa,nodes,weights,compute_adjoint)
+        eval_f_g_grad!(pcof, params, nodes, weights, compute_adjoint)
     end
 
     #When params.objFuncType == 1, this stores the total grad
@@ -138,7 +136,7 @@ function eval_grad_f_par(pcof::Vector{Float64}, grad_f::Vector{Float64}, params:
     # Add in Tikhonov regularization gradient term
     wa.gr .= 0.0
     Juqbox.tikhonov_grad!(pcof, params, wa.gr)  
-    axpy!(1.0,wa.gr,grad_f)
+    axpy!(1.0, wa.gr, grad_f)
 
 
     # Save intermediate parameter vectors
@@ -149,9 +147,8 @@ end
 
 
 # function eval_jac_g_par(pcof::Vector{Float64},x_new:: Bool, rows::Vector{Int32}, cols::Vector{Int32}, jac_g::Union{Nothing,Vector{Float64}},
-#                         params:: Juqbox.objparams, wa::Working_Arrays, nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
-function eval_jac_g_par(pcof::Vector{Float64}, rows::Vector{Int32}, cols::Vector{Int32}, jac_g::Union{Nothing,Vector{Float64}},
-    params:: Juqbox.objparams, wa::Working_Arrays, nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
+#                         params:: Juqbox.objparams, nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
+function eval_jac_g_par(pcof::Vector{Float64}, rows::Vector{Int32}, cols::Vector{Int32}, jac_g::Union{Nothing,Vector{Float64}}, params:: Juqbox.objparams, nodes::AbstractArray=[0.0],weights::AbstractArray=[1.0])
 
     if jac_g === nothing 
         if length(rows)>0
@@ -168,7 +165,7 @@ function eval_jac_g_par(pcof::Vector{Float64}, rows::Vector{Int32}, cols::Vector
         pnorm =norm(pcof .- params.last_pcof) 
         if pnorm > 1.0e-15
             compute_adjoint = true    
-            eval_f_g_grad!(pcof,params,wa,nodes,weights,compute_adjoint)    
+            eval_f_g_grad!(pcof, params, nodes, weights, compute_adjoint)    
             return
         end
 
@@ -240,8 +237,8 @@ function intermediate_par(
 end
 
 """
-    prob = setup_ipopt_problem(params, wa, nCoeff, minCoeff, maxCoeff; maxIter=50, 
-                            lbfgsMax=10, startFromScratch=true, ipTol=1e-5, acceptTol=1e-5, acceptIter=15,
+    prob = ipopt_setup(params, nCoeff, maxamp; zeroCtrlBC=true, maxIter=50, 
+                            lbfgsMax=10, coldStart=true, ipTol=1e-5, acceptTol=1e-5, acceptIter=15,
                             nodes=[0.0], weights=[1.0])
 
 Setup structure containing callback functions and convergence criteria for 
@@ -251,27 +248,24 @@ where the fundamental frequency is random.
 
 # Arguments
 - `params:: objparams`: Struct with problem definition
-- `wa::Working_Arrays`: Struct containing preallocated working arrays
 - `nCoeff:: Int64`: Number of parameters in optimization
-- `minCoeff:: Array{Float64, 1}`: Minimum allowable value for each parameter
-- `maxCoeff:: Array{Float64, 1}`: Maximum allowable value for each parameter
+- `maxamp:: Vector{Float64}`: Maximum control amplitude for each carrier frequency
+- `zeroCtrlBC:: Bool`: true (default) start and end each control function with zero amplitude
 - `maxIter:: Int64`: Maximum number of iterations to be taken by optimizer (keyword arg)
 - `lbfgsMax:: Int64`: Maximum number of past iterates for Hessian approximation by L-BFGS (keyword arg)
-- `startFromScratch:: Bool`: Specify whether the optimization is starting from file or not (keyword arg)
+- `coldStart:: Bool`: true (default): start a new optimization with ipopt, false: continue a previous optimization (keyword arg)
 - `ipTol:: Float64`: Desired convergence tolerance (relative) (keyword arg)
 - `acceptTol:: Float64`: Acceptable convergence tolerance (relative) (keyword arg)
 - `acceptIter:: Int64`: Number of acceptable iterates before triggering termination (keyword arg)
 - `nodes:: Array{Float64, 1}`: Risk-neutral opt: User specified quadrature nodes on the interval [-ϵ,ϵ] for some ϵ (keyword arg)
 - `weights:: Array{Float64, 1}`: Risk-neutral opt: User specified quadrature weights on the interval [-ϵ,ϵ] for some ϵ (keyword arg)
 """
-function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoeff:: Int64, minCoeff:: Array{Float64, 1}, maxCoeff:: Array{Float64, 1};
-                             maxIter:: Int64=50, lbfgsMax:: Int64=10, 
-                             startFromScratch:: Bool=true, ipTol:: Float64=1e-5, 
-                             acceptTol:: Float64=1e-5, acceptIter:: Int64=15,
-                             nodes::AbstractArray=[0.0], 
-                             weights::AbstractArray=[1.0],
-                             jacob_approx::String="exact")
+function ipopt_setup(params:: Juqbox.objparams, nCoeff:: Int64, maxAmp:: Vector{Float64}; zeroCtrlBC::Bool = true, maxIter:: Int64=50, lbfgsMax:: Int64=200, coldStart:: Bool=true, ipTol:: Float64=1e-5, acceptTol:: Float64=1e-5, acceptIter:: Int64=15, nodes::AbstractArray=[0.0], weights::AbstractArray=[1.0])
 
+    # setup the working_arrays object, holding temporary arrays
+    params.wa = working_arrays(params.N, params.N+params.Nguard, params.Hconst, params.Hsym_ops, params.Hanti_ops, params.Hunc_ops, params.isSymm, params.pFidType, params.objFuncType, nCoeff)
+    
+    minCoeff, maxCoeff = control_bounds(params, maxAmp, nCoeff, zeroCtrlBC)
 
     #Initialize the last fidelity and leak terms and gradients
     params.last_pcof = 1e9.*rand(nCoeff)
@@ -281,16 +275,16 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
     end
 
     # callback functions need access to the params object
-    eval_f(pcof) = eval_f_par(pcof,params, wa, nodes, weights)
-    eval_grad_f(pcof, grad_f) = eval_grad_f_par(pcof,grad_f, params, wa, nodes, weights)
+    eval_f(pcof) = eval_f_par(pcof, params, nodes, weights)
+    eval_grad_f(pcof, grad_f) = eval_grad_f_par(pcof,grad_f, params, nodes, weights)
 
     #Comment out to use xnew with later version of ipopt
-    # eval_f(pcof,x_new) = eval_f_par(pcof, x_new,params, wa, nodes, weights)
-    # eval_grad_f(pcof,x_new, grad_f) = eval_grad_f_par(pcof,x_new, grad_f, params, wa, nodes, weights)
+    # eval_f(pcof,x_new) = eval_f_par(pcof, x_new,params, nodes, weights)
+    # eval_grad_f(pcof,x_new, grad_f) = eval_grad_f_par(pcof,x_new, grad_f, params, nodes, weights)
     intermediate(alg_mod, iter_count, obj_value, inf_pr, inf_du, mu,
-                 d_norm, regularization_size, alpha_du, alpha_pr, ls_trials) =
-                     intermediate_par(alg_mod, iter_count, obj_value, inf_pr, inf_du, mu,
-                                      d_norm, regularization_size, alpha_du, alpha_pr, ls_trials, params)
+                d_norm, regularization_size, alpha_du, alpha_pr, ls_trials) =
+                    intermediate_par(alg_mod, iter_count, obj_value, inf_pr, inf_du, mu,
+                                    d_norm, regularization_size, alpha_du, alpha_pr, ls_trials, params)
 
     # setup the Ipopt data structure
     if params.objFuncType == 3
@@ -309,14 +303,13 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
     end
 
     #Create alias even if not used
-    eval_g(pcof,g) = eval_g_par(pcof,g,params,wa,nodes,weights)
-    eval_jac_g(pcof,rows,cols,jac_g) = eval_jac_g_par(pcof,rows,cols,jac_g,params,wa,nodes,weights)
-    # eval_g(pcof,x_new,g) = eval_g_par(pcof,x_new,g,params,wa,nodes,weights)
-    # eval_jac_g(pcof,x_new,rows,cols,jac_g) = eval_jac_g_par(pcof,x_new,rows,cols,jac_g,params,wa,nodes,weights)
+    eval_g(pcof,g) = eval_g_par(pcof, g, params, nodes, weights)
+    eval_jac_g(pcof,rows,cols,jac_g) = eval_jac_g_par(pcof, rows, cols, jac_g, params,nodes, weights)
+    # eval_g(pcof,x_new,g) = eval_g_par(pcof,x_new,g,params,nodes,weights)
+    # eval_jac_g(pcof,x_new,rows,cols,jac_g) = eval_jac_g_par(pcof,x_new,rows,cols,jac_g,params,nodes,weights)
 
 
     # tmp
-    #    println("setup_ipopt_problem: nCoeff = ", nCoeff, " length(minCoeff) = ", length(minCoeff))
     if @isdefined createProblem
         prob = createProblem( nCoeff, minCoeff, maxCoeff, nconst, g_L, g_U, nEleJac, nEleHess, eval_f, eval_g, eval_grad_f, eval_jac_g);
     else
@@ -331,11 +324,11 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
         addOption( prob, "tol", ipTol);
         addOption( prob, "acceptable_tol", acceptTol);
         addOption( prob, "acceptable_iter", acceptIter);
-        addOption( prob, "jacobian_approximation", jacob_approx);
+        addOption( prob, "jacobian_approximation", "exact");
         # addOption( prob, "derivative_test", "first-order");
         # addOption( prob, "derivative_test_tol", 0.0001);
         
-        if !startFromScratch # enable warm start of Ipopt
+        if !coldStart # enable warm start of Ipopt
             addOption( prob, "warm_start_init_point", "yes")
             # addOption( prob, "mu_init", 1e-6) # not sure how to set this parameter
             # addOption( prob, "nlp_scaling_method", "none") # what about scaling?
@@ -357,14 +350,14 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
         AddIpoptNumOption( prob, "tol", ipTol);
         AddIpoptNumOption( prob, "acceptable_tol", acceptTol);
         AddIpoptIntOption( prob, "acceptable_iter", acceptIter);
-        AddIpoptStrOption( prob, "jacobian_approximation", jacob_approx);
+        AddIpoptStrOption( prob, "jacobian_approximation", "exact");
         # AddIpoptStrOption( prob, "derivative_test", "first-order");
         # AddIpoptNumOption( prob, "derivative_test_tol", 1.0e-4);
         # AddIpoptNumOption( prob, "derivative_test_perturbation", 1.0e-8);
         
         
 
-        if !startFromScratch # enable warm start of Ipopt
+        if !coldStart # enable warm start of Ipopt
             AddIpoptStrOption( prob, "warm_start_init_point", "yes")
             # AddIpoptNumOption( prob, "mu_init", 1e-6) # not sure how to set this parameter
             # AddIpoptStrOption( prob, "nlp_scaling_method", "none") # what about scaling?
@@ -385,7 +378,7 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
     if @isdefined setIntermediateCallback
         setIntermediateCallback(prob, intermediate)
     else 
-        SetIntermediateCallback(prob,intermediate)
+        SetIntermediateCallback(prob, intermediate)
     end
 
 # output some of the settings
@@ -398,20 +391,33 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
     end
     
     return prob
-end
+end # ipopt_setup
+
 
 """
-    pcof = run_optimizer(prob, pcof0 [, baseName:: String=""])
+    pcof = run_optimizer(params, pcof0, maxAmp; zeroCtrlBC=true, maxIter=50, lbfgsMax=200, coldStart=true, ipTol=1e-5, acceptTol=1e-5, acceptIter=15, nodes=[0.0], weights=[1.0])
 
 Call IPOPT to  optimizize the control functions.
 
 # Arguments
-- `prob:: IpoptProblem`: Struct containing Ipopt parameters callback functions
-- `pcof0:: Array{Float64, 1}`: Initial guess for the parameter values
-- `baseName:: String`: Name of file for saving the optimized parameters; extension ".jld2" is appended
+- `params:: objparams`: Struct with problem definition
+- `pcof0:: Vector{Float64}`: Initial guess for the control vector
+- `maxamp:: Vector{Float64}`: Maximum control amplitude for each carrier frequency
+- `zeroCtrlBC:: Bool`: (Optional-kw) true (default) start and end each control function at zero amplitude
+- `maxIter:: Int64`: (Optional-kw) Maximum number of iterations to be taken by optimizer
+- `lbfgsMax:: Int64`: (Optional-kw) Maximum number of past iterates for Hessian approximation by L-BFGS
+- `coldStart:: Bool`: (Optional-kw) true (default): start a new optimization with ipopt; false: continue a previous optimization
+- `ipTol:: Float64`: (Optional-kw) Desired convergence tolerance (relative)
+- `acceptTol:: Float64`: (Optional-kw) Acceptable convergence tolerance (relative)
+- `acceptIter:: Int64`: (Optional-kw) Number of acceptable iterates before triggering termination
+- `nodes:: AbstractArray`: (Optional-kw) Risk-neutral opt: User specified quadrature nodes on the interval [-ϵ,ϵ] for some ϵ
+- `weights:: AbstractArray`: (Optional-kw) Risk-neutral opt: User specified quadrature weights on the interval [-ϵ,ϵ] for some ϵ
 """
-function run_optimizer(prob:: IpoptProblem, pcof0:: Array{Float64, 1}, baseName:: String="")
-    # takes at most max_iter >= 0 iterations. Set with addOption(prob, "max_iter", nIter)
+function run_optimizer(params:: objparams, pcof0:: Vector{Float64}, maxAmp:: Vector{Float64}; zeroCtrlBC::Bool = false, maxIter::Int64 = 50, lbfgsMax:: Int64=200, coldStart:: Bool=true, ipTol:: Float64=1e-5, acceptTol:: Float64=1e-5, acceptIter:: Int64=15, nodes::AbstractArray=[0.0], weights::AbstractArray=[1.0])
+    
+    # start by setting up the Ipopt object: prob
+    println("Ipopt initialization timing:")
+    @time prob = Juqbox.ipopt_setup(params, length(pcof0), maxAmp, zeroCtrlBC=zeroCtrlBC, maxIter=maxIter, lbfgsMax=lbfgsMax, coldStart=coldStart, ipTol=ipTol, acceptTol=acceptTol, acceptIter=acceptIter, nodes=nodes, weights=weights)
 
     # initial guess for IPOPT; make a copy of pcof0 to avoid overwriting it
     prob.x = copy(pcof0);
@@ -425,12 +431,12 @@ function run_optimizer(prob:: IpoptProblem, pcof0:: Array{Float64, 1}, baseName:
     end
     pcof = prob.x;
 
-    #save the b-spline coeffs on a JLD2 file
-    if length(baseName)>0
-        fileName = baseName * ".jld2"
-        save_pcof(fileName, pcof)
-        println("Saved B-spline parameters on binary jld2-file '", fileName, "'");
-    end
+    #save the b-spline coeffs on a JLD2 file (replace by an explicit call to save_pcof)
+    # if length(baseName)>0
+    #     fileName = baseName * ".jld2"
+    #     save_pcof(fileName, pcof)
+    #     println("Saved B-spline parameters on binary jld2-file '", fileName, "'");
+    # end
 
     return pcof
 

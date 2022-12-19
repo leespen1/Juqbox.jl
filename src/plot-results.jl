@@ -11,6 +11,7 @@ Create array of plot objects that can be visualized by, e.g., `display(pl[1])`.
 - `samplerate:: Int64`: Default: `32` samples per unit time (ns). Sample rate for generating plots.
 """
 function plot_results(params::objparams, pcof::Array{Float64,1}; casename::String = "test", savefiles::Bool = false, samplerate:: Int64 = 32)
+
     # Set default font sizes
     fnt = Plots.font("Helvetica", 12)
     lfnt = Plots.font("Helvetica", 10)
@@ -20,10 +21,6 @@ function plot_results(params::objparams, pcof::Array{Float64,1}; casename::Strin
     else 
         Plots.default(titlefont=fnt, guidefont=fnt, tickfont=fnt, legendfont=lfnt, linewidth=1, size=(650, 350))
     end
-    
-    nCoeff = length(pcof)
-    # Is there a better approach that avoids re-allocating the working_arrays object?
-    wa = Juqbox.Working_Arrays(params, nCoeff)
 
     custom = 0
 
@@ -36,7 +33,7 @@ function plot_results(params::objparams, pcof::Array{Float64,1}; casename::Strin
     println("Number of time steps: ", params.nsteps)
 
     # evaluate fidelity and unitaryhistory
-    objv, unitaryhistory, fidelity = Juqbox.traceobjgrad(pcof, params, wa, true, false);
+    objv, unitaryhistory, fidelity = Juqbox.traceobjgrad(pcof, params, true, false);
 
     # save convergence history
     convname = ""

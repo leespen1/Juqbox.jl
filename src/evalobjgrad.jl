@@ -1,3 +1,101 @@
+# The working_arrays struct holds all of the working arrays needed to call traceobjgrad. Preallocated for efficiency
+"""
+    wa = working_arrays(N:: Int64, Ntot:: Int64, Hconst::MyRealMatrix, Hsym_ops::Vector{MyRealMatrix}, Hanti_ops::Vector{MyRealMatrix}, Hunc_ops::Vector{MyRealMatrix}, isSymm::BitArray{1}, nCoeff::Int64)
+
+Constructor for the mutable struct working_arrays containing preallocated temporary storage for time stepping.
+
+ 
+# Arguments
+- `param:: objparams`: Struct with problem definition
+- `nCoeff:: Int64`: Number of parameters in optimization
+"""
+mutable struct working_arrays
+    # Hamiltonian matrices
+    K0  ::MyRealMatrix
+    K05 ::MyRealMatrix
+    K1  ::MyRealMatrix
+    S0  ::MyRealMatrix
+    S05 ::MyRealMatrix
+    S1  ::MyRealMatrix
+
+    # Forward/Adjoint variables+stages
+    #vtargetr    ::Array{Float64,2} # moved to params
+    #vtargeti    ::Array{Float64,2}
+    lambdar     ::Array{Float64,2}
+    lambdar0    ::Array{Float64,2}
+    lambdai     ::Array{Float64,2}
+    lambdai0    ::Array{Float64,2}
+    lambdar05   ::Array{Float64,2}
+    lambdar_nfrc  ::Array{Float64,2}
+    lambdar0_nfrc ::Array{Float64,2}
+    lambdai_nfrc  ::Array{Float64,2}
+    lambdai0_nfrc ::Array{Float64,2}
+    lambdar05_nfrc::Array{Float64,2}
+    κ₁          ::Array{Float64,2}
+    κ₂          ::Array{Float64,2}
+    ℓ₁          ::Array{Float64,2}
+    ℓ₂          ::Array{Float64,2}
+    rhs         ::Array{Float64,2}
+    gr0         ::Array{Float64,2}
+    gi0         ::Array{Float64,2}
+    gr1         ::Array{Float64,2}
+    gi1         ::Array{Float64,2}
+    hr0         ::Array{Float64,2}
+    hi0         ::Array{Float64,2}
+    hi1         ::Array{Float64,2}
+    hr1         ::Array{Float64,2}
+    vr          ::Array{Float64,2}
+    vi          ::Array{Float64,2}
+    vi05        ::Array{Float64,2}
+    vr0         ::Array{Float64,2}
+    vfinalr     ::Array{Float64,2}
+    vfinali     ::Array{Float64,2}
+    gr          ::Array{Float64,1}
+    gi          ::Array{Float64,1}
+    gradobjfadj ::Array{Float64,1}
+    tr_adj      ::Array{Float64,1}
+
+    function working_arrays(N:: Int64, Ntot:: Int64, Hconst::MyRealMatrix, Hsym_ops::Vector{MyRealMatrix}, Hanti_ops::Vector{MyRealMatrix}, Hunc_ops::Vector{MyRealMatrix}, isSymm::BitArray{1}, pFidType::Int64, objFuncType::Int64, nCoeff::Int64)
+        #N = params.N
+        #Ntot = N + params.Nguard
+
+        # K0,S0,K05,S05,K1,S1,vtargetr,vtargeti = KS_alloc(params)
+        # ks_alloc(Ntot:: Int64, Hconst::MyRealMatrix, Hsym_ops::Vector{MyRealMatrix}, Hanti_ops::Vector{MyRealMatrix}, Hunc_ops::Vector{MyRealMatrix}, isSymm::BitArray{1})
+        K0, S0, K05, S05, K1, S1 = ks_alloc(Ntot, Hconst, Hsym_ops, Hanti_ops, Hunc_ops, isSymm)
+
+        lambdar,lambdar0,lambdai,lambdai0,lambdar05,κ₁,κ₂,ℓ₁,ℓ₂,rhs,gr0,gi0,gr1,gi1,hr0,hi0,hi1,hr1,vr,vi,vi05,vr0,vfinalr,vfinali = time_step_alloc(Ntot,N)
+        if pFidType == 3
+            gr, gi, gradobjfadj, tr_adj = grad_alloc(nCoeff-1)
+        else
+            gr, gi, gradobjfadj, tr_adj = grad_alloc(nCoeff)
+        end
+        if objFuncType != 1
+            lambdar_nfrc  = zeros(Float64,size(lambdar))
+            lambdar0_nfrc = zeros(Float64,size(lambdar0))
+            lambdai_nfrc  = zeros(Float64,size(lambdai))
+            lambdai0_nfrc = zeros(Float64,size(lambdai0))
+            lambdar05_nfrc= zeros(Float64,size(lambdar05))
+        else
+            lambdar_nfrc  = zeros(0,0)
+            lambdar0_nfrc = zeros(0,0)
+            lambdai_nfrc  = zeros(0,0)
+            lambdai0_nfrc = zeros(0,0)
+            lambdar05_nfrc= zeros(0,0)
+        end
+        # new(K0,S0,K05,S05,K1,S1,vtargetr,vtargeti,
+        #     lambdar,lambdar0,lambdai,lambdai0,lambdar05,
+        #     lambdar_nfrc,lambdar0_nfrc,lambdai_nfrc,lambdai0_nfrc,lambdar05_nfrc,
+        #     κ₁,κ₂,ℓ₁,ℓ₂,rhs,gr0,gi0,gr1,gi1,hr0,hi0,hi1,hr1,
+        #     vr,vi,vi05,vr0,vfinalr,vfinali,gr, gi, gradobjfadj, tr_adj)
+        new(K0, S0, K05, S05, K1, S1,
+            lambdar,lambdar0,lambdai,lambdai0,lambdar05,
+            lambdar_nfrc,lambdar0_nfrc,lambdai_nfrc,lambdai0_nfrc,lambdar05_nfrc,
+            κ₁,κ₂,ℓ₁,ℓ₂,rhs,gr0,gi0,gr1,gi1,hr0,hi0,hi1,hr1,
+            vr, vi, vi05, vr0, vfinalr, vfinali, gr, gi, gradobjfadj, tr_adj)
+    end
+    
+end
+
 """
     params = objparams(Ne, Ng, T, Nsteps;
                         Uinit=Uinit, 
@@ -71,9 +169,9 @@ mutable struct objparams
     Hconst ::MyRealMatrix     # time-independent part of the Hamiltonian (assumed symmetric)
    
     # Control Hamiltonians
-    Hsym_ops  ::Array{MyRealMatrix,1}   # Symmetric control Hamiltonians
-    Hanti_ops ::Array{MyRealMatrix,1}   # Anti-symmetric control Hamiltonians
-    Hunc_ops  ::Array{MyRealMatrix,1}   # Uncoupled control Hamiltonians
+    Hsym_ops  ::Vector{MyRealMatrix}   # Symmetric control Hamiltonians
+    Hanti_ops ::Vector{MyRealMatrix}   # Anti-symmetric control Hamiltonians
+    Hunc_ops  ::Vector{MyRealMatrix}   # Uncoupled control Hamiltonians
 
     Ncoupled :: Int64 # Number of coupled Hamiltonians.
     Nunc     :: Int64 # Number of uncoupled Hamiltonians.
@@ -134,6 +232,9 @@ mutable struct objparams
     dVds_i      ::Array{Float64,2}
 
     sv_type:: Int64
+
+    # temporary storage for time stepping, to be allocated later (by setup_ipopt_problem)
+    wa:: working_arrays
     
 # Regular arrays
     function objparams(Ne::Array{Int64,1}, Ng::Array{Int64,1}, T::Float64, nsteps::Int64;
@@ -146,10 +247,10 @@ mutable struct objparams
                        forb_weights:: Vector{Float64} = Float64[],
                        objFuncType:: Int64 = 1, leak_ubound:: Float64=1.0e-3,
                        wmatScale::Float64 = 1.0, use_sparse::Bool = false, use_custom_forbidden::Bool = false,
-                       linear_solver::lsolver_object = lsolver_object(nrhs=prod(Ne)),
+                       linear_solver::lsolver_object = lsolver_object(nrhs=prod(Ne)), msb_order::Bool = true,
                        dVds::Array{ComplexF64,2}= Array{ComplexF64}(undef,0,0))
         pFidType = 2
-        Nosc   = length(Ne)
+        Nosc   = length(Ne) # number of subsystems
         N      = prod(Ne)
         Ntot   = prod(Ne+Ng)
         Nguard = Ntot-N
@@ -195,7 +296,7 @@ mutable struct objparams
         use_bcarrier = true
 
         # Weights in the W matrix for discouraging population of guarded states
-        wmat = wmatScale.*Juqbox.wmatsetup(Ne, Ng)
+        wmat = wmatScale.*Juqbox.wmatsetup(Ne, Ng, msb_order)
 
         # Build weighting matrices if there are user-specified forbidden states
         if use_custom_forbidden
@@ -324,102 +425,6 @@ mutable struct objparams
 end # mutable struct objparams
 
 
-# This struct holds all of the working arrays needed to call traceobjgrad. Preallocated for efficiency
-"""
-    wa = Working_Arrays(params::objparams, nCoeff::Int64)
-
-Constructor for the mutable struct Working_Arrays containing preallocated working arrays.
-
- 
-# Arguments
-- `param:: objparams`: Struct with problem definition
-- `nCoeff:: Int64`: Number of parameters in optimization
-"""
-mutable struct Working_Arrays
-    # Hamiltonian matrices
-    K0  ::MyRealMatrix
-    K05 ::MyRealMatrix
-    K1  ::MyRealMatrix
-    S0  ::MyRealMatrix
-    S05 ::MyRealMatrix
-    S1  ::MyRealMatrix
-
-    # Forward/Adjoint variables+stages
-    #vtargetr    ::Array{Float64,2} # moved to params
-    #vtargeti    ::Array{Float64,2}
-    lambdar     ::Array{Float64,2}
-    lambdar0    ::Array{Float64,2}
-    lambdai     ::Array{Float64,2}
-    lambdai0    ::Array{Float64,2}
-    lambdar05   ::Array{Float64,2}
-    lambdar_nfrc  ::Array{Float64,2}
-    lambdar0_nfrc ::Array{Float64,2}
-    lambdai_nfrc  ::Array{Float64,2}
-    lambdai0_nfrc ::Array{Float64,2}
-    lambdar05_nfrc::Array{Float64,2}
-    κ₁          ::Array{Float64,2}
-    κ₂          ::Array{Float64,2}
-    ℓ₁          ::Array{Float64,2}
-    ℓ₂          ::Array{Float64,2}
-    rhs         ::Array{Float64,2}
-    gr0         ::Array{Float64,2}
-    gi0         ::Array{Float64,2}
-    gr1         ::Array{Float64,2}
-    gi1         ::Array{Float64,2}
-    hr0         ::Array{Float64,2}
-    hi0         ::Array{Float64,2}
-    hi1         ::Array{Float64,2}
-    hr1         ::Array{Float64,2}
-    vr          ::Array{Float64,2}
-    vi          ::Array{Float64,2}
-    vi05        ::Array{Float64,2}
-    vr0         ::Array{Float64,2}
-    vfinalr     ::Array{Float64,2}
-    vfinali     ::Array{Float64,2}
-    gr          ::Array{Float64,1}
-    gi          ::Array{Float64,1}
-    gradobjfadj ::Array{Float64,1}
-    tr_adj      ::Array{Float64,1}
-
-    function Working_Arrays(params::objparams, nCoeff::Int64)
-        N = params.N
-        Ntot = N + params.Nguard
-
-        # K0,S0,K05,S05,K1,S1,vtargetr,vtargeti = KS_alloc(params)
-        K0,S0,K05,S05,K1,S1 = KS_alloc(params)
-        lambdar,lambdar0,lambdai,lambdai0,lambdar05,κ₁,κ₂,ℓ₁,ℓ₂,rhs,gr0,gi0,gr1,gi1,hr0,hi0,hi1,hr1,vr,vi,vi05,vr0,vfinalr,vfinali = time_step_alloc(Ntot,N)
-        if params.pFidType == 3
-            gr, gi, gradobjfadj, tr_adj = grad_alloc(nCoeff-1)
-        else
-            gr, gi, gradobjfadj, tr_adj = grad_alloc(nCoeff)
-        end
-        if params.objFuncType != 1
-            lambdar_nfrc  = zeros(Float64,size(lambdar))
-            lambdar0_nfrc = zeros(Float64,size(lambdar0))
-            lambdai_nfrc  = zeros(Float64,size(lambdai))
-            lambdai0_nfrc = zeros(Float64,size(lambdai0))
-            lambdar05_nfrc= zeros(Float64,size(lambdar05))
-        else
-            lambdar_nfrc  = zeros(0,0)
-            lambdar0_nfrc = zeros(0,0)
-            lambdai_nfrc  = zeros(0,0)
-            lambdai0_nfrc = zeros(0,0)
-            lambdar05_nfrc= zeros(0,0)
-        end
-        # new(K0,S0,K05,S05,K1,S1,vtargetr,vtargeti,
-        #     lambdar,lambdar0,lambdai,lambdai0,lambdar05,
-        #     lambdar_nfrc,lambdar0_nfrc,lambdai_nfrc,lambdai0_nfrc,lambdar05_nfrc,
-        #     κ₁,κ₂,ℓ₁,ℓ₂,rhs,gr0,gi0,gr1,gi1,hr0,hi0,hi1,hr1,
-        #     vr,vi,vi05,vr0,vfinalr,vfinali,gr, gi, gradobjfadj, tr_adj)
-        new(K0, S0, K05, S05, K1, S1,
-            lambdar,lambdar0,lambdai,lambdai0,lambdar05,
-            lambdar_nfrc,lambdar0_nfrc,lambdai_nfrc,lambdai0_nfrc,lambdar05_nfrc,
-            κ₁,κ₂,ℓ₁,ℓ₂,rhs,gr0,gi0,gr1,gi1,hr0,hi0,hi1,hr1,
-            vr, vi, vi05, vr0, vfinalr, vfinali, gr, gi, gradobjfadj, tr_adj)
-    end
-    
-end
-
 """
     objf = traceobjgrad(pcof0, params, wa[, verbose = false, evaladjoint = true])
 
@@ -433,7 +438,8 @@ function and/or gradient.
 - `verbose::Bool = false`: Run simulation with additional terminal output and store state history.
 - `evaladjoint::Bool = true`: Solve the adjoint equation and calculate the gradient of the objective function.
 """
-function traceobjgrad(pcof0::Array{Float64,1},  params::objparams, wa::Working_Arrays, verbose::Bool = false, evaladjoint::Bool = true)
+function traceobjgrad(pcof0::Array{Float64,1},  params::objparams, verbose::Bool = false, evaladjoint::Bool = true)
+    wa = params.wa
     order  = 2
     N      = params.N    
     Nguard = params.Nguard  
@@ -1012,7 +1018,7 @@ function setup_prior!(params::objparams, priorFile::String)
 end
 
 """
-    wmat = wmatsetup(Ne, Ng)
+    wmat = wmatsetup(Ne, Ng[, msb_order])
 
 Build the default positive semi-definite weighting matrix W to calculate the 
 leakage into higher energy forbidden states
@@ -1020,8 +1026,9 @@ leakage into higher energy forbidden states
 # Arguments
 - `Ne::Array{Int64,1}`: Number of essential energy levels for each subsystem
 - `Ng::Array{Int64,1}`: Number of guard energy levels for each subsystem
+- `msb_order::Bool`: Ordering of the subsystems within the state vector (default is true)
 """
-function wmatsetup(Ne::Array{Int64,1}, Ng::Array{Int64,1})
+function wmatsetup(Ne::Array{Int64,1}, Ng::Array{Int64,1}, msb_order::Bool = true)
     Nt = Ne + Ng
     Ndim = length(Ne)
     @assert(Ndim == 1 || Ndim == 2 || Ndim ==3)
@@ -1035,115 +1042,176 @@ function wmatsetup(Ne::Array{Int64,1}, Ng::Array{Int64,1})
 
     if sum(Ng) > 0
         nForb = 0 # number of states with the highest index in at least one dimension
+        
+        if msb_order # Classical Juqbox ordering
+            if Ndim == 1
+                fact = 0.1
+                for q in 0:Ng[1]-1
+                    w[Ntot-q] = fact^q
+                end
+                nForb = 1
+                coeff = 1.0
+            elseif Ndim == 2
+                fact = 1e-3 # for more emphasis on the "forbidden" states. Old value: 0.1
+                q = 0 # element in the array 'w'
 
-        if Ndim == 1
-            fact = 0.1
-            for q in 0:Ng[1]-1
-                w[Ntot-q] = fact^q
-            end
-            nForb = 1
-            coeff = 1.0
-        elseif Ndim == 2
-            fact = 1e-3 # for more emphasis on the "forbidden" states. Old value: 0.1
-            q = 0 # element in the array 'w'
-
-            for i2 = 1:Nt[2]
-                for i1 = 1:Nt[1]
-                    q += 1
-                    # initialize temp variables
-                    temp[1] = 0.0
-                    temp[2] = 0.0
-                    if i1 <= Ne[1] && i2 <= Ne[2]
-                        w[q] = 0.0
-                    else
-                        # determine and assign the largest penalty
-                        if i1 > Ne[1]   #only included if at a guard level
-                            temp[1] = fact^(Nt[1]-i1)
-                        end
-                        if i2 > Ne[2]   #only included if at a guard level
-                            temp[2] = fact^(Nt[2]-i2)
-                        end
-
-                        if i1 == Nt[1] || i2 == Nt[2]
-                            nForb += 1 
-                        end
-
-                        forbFact=1.0
-
-                        # additional weighting (ad hoc)
-                        # if i1 == Nt1 && i2<=Ne2 
-                        #   forbFact=100
-                        # end
-                        # if i2 == Nt2 && i1<=Ne1 
-                        #   forbFact=100
-                        # end
-
-                        w[q] = forbFact*maximum(temp)
-          
-                    end # if guard level
-                end # for i1
-            end # for i2
-
-            # normalize by the number of entries with w=1
-            coeff = 1.0/nForb # was 1/nForb
-        elseif Ndim == 3
-            fact = 1e-3 #  0.1 # for more emphasis on the "forbidden" states. Old value: 0.1
-            nForb = 0 # number of states with the highest index in at least one dimension
-            q = 0
-            for i3 = 1:Nt[3]
                 for i2 = 1:Nt[2]
                     for i1 = 1:Nt[1]
                         q += 1
                         # initialize temp variables
-                        temp1 = 0.0
-                        temp2 = 0.0
-                        temp3 = 0.0
-                        if i1 <= Ne[1] && i2 <= Ne[2] && i3 <= Ne[3]
+                        temp[1] = 0.0
+                        temp[2] = 0.0
+                        if i1 <= Ne[1] && i2 <= Ne[2]
                             w[q] = 0.0
                         else
                             # determine and assign the largest penalty
                             if i1 > Ne[1]   #only included if at a guard level
-#                                temp1 = (Nt[1] - Ne[1]) * fact^(Nt[1]-i1)
-                                temp1 = fact^(Nt[1]-i1)
+                                temp[1] = fact^(Nt[1]-i1)
                             end
                             if i2 > Ne[2]   #only included if at a guard level
-#                                temp2 = (Nt[2] - Ne[2]) *fact^(Nt[2]-i2)
-                                temp2 = fact^(Nt[2]-i2)
+                                temp[2] = fact^(Nt[2]-i2)
                             end
-                            if i3 > Ne[3]   #only included if at a guard level
-#                                temp3 = (Nt[3] - Ne[3]) *fact^(Nt[3]-i3)
-                                temp3 = fact^(Nt[3]-i3)
+                            if i1 == Nt[1] || i2 == Nt[2]
+                                nForb += 1 
                             end
 
                             forbFact=1.0
-                            # additional weighting (ad hoc)
-                            # if i1 == Nt[1] && i2<=Ne[2] && i3<=Ne3
-                            #   forbFact=100
-                            # end
-                            # if i2 == Nt[2] && i1<=Ne[1] && i3<=Ne3
-                            #   forbFact=100
-                            # end
-                            # if i3 == Nt[3] && i1<=Ne[1] && i2<=Ne[2]
-                            #    forbFact=100
-                            # end
+                            w[q] = forbFact*maximum(temp)
+            
+                        end # if guard level
+                    end # for i1
+                end # for i2
 
-                            w[q] = forbFact*max(temp1, temp2, temp3)
+                # normalize by the number of entries with w=1
+                coeff = 1.0/nForb # was 1/nForb
+            elseif Ndim == 3
+                fact = 1e-3 #  0.1 # for more emphasis on the "forbidden" states. Old value: 0.1
+                nForb = 0 # number of states with the highest index in at least one dimension
+                q = 0
+                for i3 = 1:Nt[3]
+                    for i2 = 1:Nt[2]
+                        for i1 = 1:Nt[1]
+                            q += 1
+                            # initialize temp variables
+                            temp1 = 0.0
+                            temp2 = 0.0
+                            temp3 = 0.0
+                            if i1 <= Ne[1] && i2 <= Ne[2] && i3 <= Ne[3]
+                                w[q] = 0.0
+                            else
+                                # determine and assign the largest penalty
+                                if i1 > Ne[1]   #only included if at a guard level
+                                    temp1 = fact^(Nt[1]-i1)
+                                end
+                                if i2 > Ne[2]   #only included if at a guard level
+                                    temp2 = fact^(Nt[2]-i2)
+                                end
+                                if i3 > Ne[3]   #only included if at a guard level
+                                    temp3 = fact^(Nt[3]-i3)
+                                end
 
-                            if i1 == Nt[1] || i2 == Nt[2] || i3 == Nt[3]
-                                nForb += 1
-                            end
+                                forbFact=1.0
+                                w[q] = forbFact*max(temp1, temp2, temp3)
 
-                        end # if
+                                if i1 == Nt[1] || i2 == Nt[2] || i3 == Nt[3]
+                                    nForb += 1
+                                end
+
+                            end # if
+                        end # for
                     end # for
                 end # for
-            end # for
 
-            # normalize by the number of entries with w=1
-            coeff = 10.0/nForb # was 1/nForb
-        end # if ndim == 3
+                # normalize by the number of entries with w=1
+                coeff = 10.0/nForb # was 1/nForb
+            end # if ndim == 3
+        else # msb_order = false
+            if Ndim == 1
+                fact = 0.1
+                for q in 0:Ng[1]-1
+                    w[Ntot-q] = fact^q
+                end
+                nForb = 1
+                coeff = 1.0
+            elseif Ndim == 2
+                fact = 1e-3 # for more emphasis on the "forbidden" states. Old value: 0.1
+                q = 0 # element in the array 'w'
 
+                for i1 = 1:Nt[1]
+                    for i2 = 1:Nt[2]
+                        q += 1
+                        # initialize temp variables
+                        temp[1] = 0.0
+                        temp[2] = 0.0
+                        if i1 <= Ne[1] && i2 <= Ne[2]
+                            w[q] = 0.0
+                        else
+                            # determine and assign the largest penalty
+                            if i1 > Ne[1]   #only included if at a guard level
+                                temp[1] = fact^(Nt[1]-i1)
+                            end
+                            if i2 > Ne[2]   #only included if at a guard level
+                                temp[2] = fact^(Nt[2]-i2)
+                            end
+                            if i1 == Nt[1] || i2 == Nt[2]
+                                nForb += 1 
+                            end
+
+                            forbFact=1.0
+                            w[q] = forbFact*maximum(temp)
+            
+                        end # if guard level
+                    end # for i1
+                end # for i2
+
+                # normalize by the number of entries with w=1
+                coeff = 1.0/nForb # was 1/nForb
+            elseif Ndim == 3
+                fact = 1e-3 #  0.1 # for more emphasis on the "forbidden" states. Old value: 0.1
+                nForb = 0 # number of states with the highest index in at least one dimension
+                q = 0
+
+                for i1 = 1:Nt[1]
+                    for i2 = 1:Nt[2]
+                        for i3 = 1:Nt[3]
+                            q += 1
+                            # initialize temp variables
+                            temp1 = 0.0
+                            temp2 = 0.0
+                            temp3 = 0.0
+                            if i1 <= Ne[1] && i2 <= Ne[2] && i3 <= Ne[3]
+                                w[q] = 0.0
+                            else
+                                # determine and assign the largest penalty
+                                if i1 > Ne[1]   #only included if at a guard level
+                                    temp1 = fact^(Nt[1]-i1)
+                                end
+                                if i2 > Ne[2]   #only included if at a guard level
+                                    temp2 = fact^(Nt[2]-i2)
+                                end
+                                if i3 > Ne[3]   #only included if at a guard level
+                                    temp3 = fact^(Nt[3]-i3)
+                                end
+
+                                forbFact=1.0
+                                w[q] = forbFact*max(temp1, temp2, temp3)
+
+                                if i1 == Nt[1] || i2 == Nt[2] || i3 == Nt[3]
+                                    nForb += 1
+                                end
+
+                            end # if
+                        end # for
+                    end # for
+                end # for
+
+                # normalize by the number of entries with w=1
+                coeff = 10.0/nForb # was 1/nForb
+            end # if ndim == 3
+        end # lsb ordering
         # println("wmatsetup: Number of forbidden states = ", nForb, " scaling coeff = ", coeff)
     end # if sum(Ng) > 0
+
     wmat = coeff * Diagonal(w) # turn vector into diagonal matrix
     return wmat
 end
@@ -1249,6 +1317,46 @@ function zero_start_end!(params::objparams, D1:: Int64, minCoeff:: Array{Float64
 
 #    @printf("Ncoupled = %d, Nfreq = %d, D1 = %d, nCoeff = %d\n", Ncoupled, Nfreq, D1, nCoeff)
     for c in 1:Ncoupled+Nunc  # We assume that either Nunc = 0 or Ncoupled = 0
+        for f in 1:Nfreq
+            for q in 0:1
+                offset1 = 2*(c-1)*Nfreq*D1 + (f-1)*2*D1 + q*D1
+                # start
+                minCoeff[ offset1 + 1] = 0.0
+                minCoeff[ offset1 + 2] = 0.0
+                maxCoeff[ offset1 + 1] = 0.0
+                maxCoeff[ offset1 + 2] = 0.0
+                # end
+                offset2 = offset1+D1
+                minCoeff[ offset2-1] = 0.0
+                minCoeff[ offset2] = 0.0
+                maxCoeff[ offset2-1] = 0.0
+                maxCoeff[ offset2 ] = 0.0
+            end
+        end
+    end
+end
+
+#------------------------------------------------------------
+"""
+    zero_start_end!(Nctrl, Nfreq, D1, minCoeff, maxCoeff)
+
+Force the control functions to start and end at zero by setting zero bounds for the first two and last 
+two parameters in each B-spline segment.
+ 
+# Arguments
+- `Nctrl:: Int64`: Number of control Hamiltonians.
+- `Nfreq:: Int64`: Number of carrier frequencies.
+- `D1:: Int64`: Number of basis functions in each segment.
+- `minCoeff:: Vector{Float64}`: Lower parameter bounds to be modified
+- `maxCoeff:: Vector{Float64}`: Upper parameter bounds to be modified
+"""
+function zero_start_end!(Nctrl::Int64, Nfreq::Int64, D1:: Int64, minCoeff:: Array{Float64,1}, maxCoeff:: Array{Float64,1} )
+    @assert(D1 >= 5) # Need at least 5 parameters per B-spline segment
+    @assert(Nctrl >= 1)
+    @assert(Nfreq >= 1)
+
+#    @printf("Ncoupled = %d, Nfreq = %d, D1 = %d, nCoeff = %d\n", Ncoupled, Nfreq, D1, nCoeff)
+    for c in 1:Nctrl  # We assume that either Nunc = 0 or Ncoupled = 0
         for f in 1:Nfreq
             for q in 0:1
                 offset1 = 2*(c-1)*Nfreq*D1 + (f-1)*2*D1 + q*D1
@@ -2188,80 +2296,115 @@ function estimate_Neumann!(tol::Float64, params::objparams, maxpar::Array{Float6
 end
 
 
-"""
-    nsteps = calculate_timestep(T, H0, Hsym_ops, Hanti_ops, maxpar [, Pmin = 40])
+# """
+#     nsteps = calculate_timestep(T, H0, Hsym_ops, Hanti_ops, maxpar [, Pmin = 40])
 
-Estimate the number of time steps needed for the simulation, for the case without uncoupled controls.
+# Estimate the number of time steps needed for the simulation, for the case without uncoupled controls.
  
-# Arguments
-- `T:: Float64`: Final simulation
-- `H0::Array{Float64,2}`: Time-independent part of the Hamiltonian matrix
-- `Hsym_ops:: Array{Float64,2}`: Array of symmetric control Hamiltonians
-- `Hanti_ops:: Array{Float64,2}`: Array of symmetric control Hamiltonians
-- `maxpar:: Array{Float64,1}`: Maximum parameter value for each subsystem
-- `Pmin:: Int64`: Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
+# # Arguments
+# - `T:: Float64`: Final simulation
+# - `H0:: Matrix{Float64}`: Time-independent part of the Hamiltonian matrix
+# - `Hsym_ops:: Vector{Matrix{Float64}}`: Array of symmetric control Hamiltonians
+# - `Hanti_ops:: Vector{Matrix{Float64}}`: Array of symmetric control Hamiltonians
+# - `maxpar:: Vector{Float64}`: Maximum parameter value for each subsystem
+# - `Pmin:: Int64`: Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
+# """
+# function calculate_timestep(T::Float64, H0::Matrix{Float64}, Hsym_ops::Vector{Matrix{Float64}},Hanti_ops::Vector{Matrix{Float64}}, maxpar::Vector{Float64}, Pmin::Int64 = 40)
+#     K1 = copy(H0) 
+#     Ncoupled = length(Hsym_ops)
+
+#     # Coupled control Hamiltonians
+#     for i = 1:Ncoupled
+#         K1 = K1 + maxpar[i].*Hsym_ops[i] + 1im*maxpar[i].*Hanti_ops[i]
+#     end
+
+#     # Estimate time step
+#     lamb = eigvals(Array(K1))
+#     maxeig = maximum(abs.(lamb)) 
+#     mineig = minimum(abs.(lamb)) 
+
+#     samplerate1 = maxeig*Pmin/(2*pi)
+#     nsteps = ceil(Int64, T*samplerate1)
+
+#     # NOTE: The above estimate does not account for quickly varying signals or a large number of splines.  
+#     # Double check at least 2-3 points per spline to resolve control function.
+
+#     return nsteps
+# end
+
+# # for sparse matrix format
+# """
+#     nsteps = calculate_timestep(T, H0, Hsym_ops, Hanti_ops, maxpar [, Pmin = 40])
+
+# Estimate the number of time steps needed for the simulation, for the case without uncoupled controls.
+ 
+# # Arguments
+# - `T:: Float64`: Final simulation
+# - `H0:: SparseMatrixCSC{Float64,Int64}`: Time-independent part of the Hamiltonian matrix
+# - `Hsym_ops:: Vector{SparseMatrixCSC{Float64,Int64}}`: Array of symmetric control Hamiltonians
+# - `Hanti_ops:: Vector{SparseMatrixCSC{Float64,Int64}}`: Array of symmetric control Hamiltonians
+# - `maxpar:: Vector{Float64}`: Maximum parameter value for each subsystem
+# - `Pmin:: Int64`: Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
+# """
+# function calculate_timestep(T::Float64, H0::SparseMatrixCSC{Float64,Int64}, Hsym_ops::Vector{SparseMatrixCSC{Float64,Int64}},Hanti_ops::Vector{SparseMatrixCSC{Float64,Int64}}, maxpar::Vector{Float64}, Pmin::Int64 = 40)
+#     K1 = copy(H0) 
+#     Ncoupled = length(Hsym_ops)
+
+#     # Coupled control Hamiltonians
+#     for i = 1:Ncoupled
+#         K1 = K1 + maxpar[i].*Hsym_ops[i] + 1im*maxpar[i].*Hanti_ops[i]
+#     end
+
+#     # Estimate time step
+#     lamb = eigvals(Array(K1))
+#     maxeig = maximum(abs.(lamb)) 
+#     mineig = minimum(abs.(lamb)) 
+
+#     samplerate1 = maxeig*Pmin/(2*pi)
+#     nsteps = ceil(Int64, T*samplerate1)
+
+#     # NOTE: The above estimate does not account for quickly varying signals or a large number of splines.  
+#     # Double check at least 2-3 points per spline to resolve control function.
+
+#     return nsteps
+# end
+
+# unified calculation of the time step, merging previous cases into one routine
 """
-function calculate_timestep(T::Float64, H0::AbstractArray,Hsym_ops::AbstractArray,Hanti_ops::AbstractArray, maxpar::Array{Float64,1}, Pmin::Int64 = 40)
-    K1 = copy(H0) 
-    Ncoupled = length(Hsym_ops)
-
-    # Coupled control Hamiltonians
-    for i = 1:Ncoupled
-        K1 = K1 + maxpar[i].*Hsym_ops[i] + 1im*maxpar[i].*Hanti_ops[i]
-    end
-
-    # Estimate time step
-    lamb = eigvals(Array(K1))
-    maxeig = maximum(abs.(lamb)) 
-    mineig = minimum(abs.(lamb)) 
-
-    samplerate1 = maxeig*Pmin/(2*pi)
-    nsteps = ceil(Int64, T*samplerate1)
-
-    # NOTE: The above estimate does not account for quickly varying signals or a large number of splines.  
-    # Double check at least 2-3 points per spline to resolve control function.
-
-    return nsteps
-end
-
-"""
-    nsteps = calculate_timestep(T, H0, Hsym_ops, Hanti_ops, Hunc_ops, 
-                                              maxpar, max_flux[, Pmin = 40])
+    nsteps = calculate_timestep(T, H0; Hsym_ops=[], Hanti_ops=[], Hunc_ops=[], maxSym=[], maxUnc=[], Pmin=40)
 
 Estimate the number of time steps needed for the simulation, when there are uncoupled controls.
  
 # Arguments
-- `T:: Float64`: Final simulation
-- `H0::Array{Float64,2}`: Time-independent part of the Hamiltonian matrix
-- `Hsym_ops:: Array{Float64,2}`: Array of symmetric control Hamiltonians
-- `Hanti_ops:: Array{Float64,2}`: Array of symmetric control Hamiltonians
-- `Hunc_ops:: Array{Float64,2}`: Array of uncoupled control Hamiltonians
-- `maxpar:: Array{Float64,1}`: Maximum parameter value for each coupled control
-- `max_flux:: Array{Float64,1}`: Maximum parameter value for each uncoupled control
-- `Pmin:: Int64`: Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
+- `T:: Float64`: Gate duration = Final simulation time
+- `H0::Matrix{Float64}`: Time-independent part of the Hamiltonian matrix
+- `Hsym_ops:: Vector{Matrix{Float64}}`: (Optional kw-arg) Array of symmetric control Hamiltonians
+- `Hanti_ops:: Vector{Matrix{Float64}}`: (Optional kw-arg) Array of anti-symmetric control Hamiltonians
+- `Hunc_ops:: Vector{Matrix{Float64}}`: (Optional kw-arg) Array of uncoupled control Hamiltonians
+- `maxCop:: Vector{Float64}`: (Optional kw-arg) Maximum control amplitude for each sym/anti-sym control Hamiltonian
+- `maxUnc:: Vector{Float64}`: (Optional kw-arg) Maximum control amplitude for each uncoupled control Hamiltonian
+- `Pmin:: Int64`: (Optional kw-arg) Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
 """
-function calculate_timestep(T::Float64, H0::AbstractArray,Hsym_ops::AbstractArray,Hanti_ops::AbstractArray,
-                            Hunc_ops::AbstractArray,maxpar::Array{Float64,1},max_flux::Array{Float64,1}, Pmin::Int64 = 40)
-    K1 = copy(H0) 
+function calculate_timestep(T::Float64, H0::Matrix{Float64}; Hsym_ops::Vector{Matrix{Float64}}=Matrix{Float64}[], Hanti_ops::Vector{Matrix{Float64}}=Matrix{Float64}[], Hunc_ops::Vector{Matrix{Float64}}=Matrix{Float64}[], maxCop::Vector{Float64}=Float64[], maxUnc::Vector{Float64}=Float64[], Pmin::Int64=40)
+
     Ncoupled = length(Hsym_ops)
     Nunc = length(Hunc_ops)
+    @assert(length(maxCop)>= Ncoupled)
+    @assert(length(maxUnc)>= Nunc)
+
+    K1 = copy(H0) # system Hamiltonian
 
     # Coupled control Hamiltonians
     for i = 1:Ncoupled
-        K1 = K1 .+ maxpar[i].*Hsym_ops[i] .+ 1im*maxpar[i].*Hanti_ops[i]
-    end
-
-    # Typecasting issue for sparse arrays
-    if(typeof(H0) == SparseMatrixCSC{Float64,Int64})
-        K1 = SparseMatrixCSC{ComplexF64,Int64}(K1)
+        K1 += maxCop[i].*Hsym_ops[i] + 1im*maxCop[i].*Hanti_ops[i]
     end
 
     # Uncoupled control Hamiltonians
     for i = 1:Nunc
         if(issymmetric(Hunc_ops[i]))
-            K1 = K1 .+ max_flux[i]*Hunc_ops[i]
+            K1 += maxUnc[i]*Hunc_ops[i]
         elseif(norm(Hunc_ops[i]+Hunc_ops[i]') < 1e-14)
-            K1 .+= 1im*max_flux[i].*Hunc_ops[i]
+            K1 += 1im*maxUnc[i].*Hunc_ops[i]
         else 
             throw(ArgumentError("Uncoupled Hamiltonians must currently be either symmetric or anti-symmetric.\n"))
         end
@@ -2281,34 +2424,46 @@ function calculate_timestep(T::Float64, H0::AbstractArray,Hsym_ops::AbstractArra
     return nsteps
 end
 
-# Function to estimate the number of time steps needed for the simulation. Only uncoupled controls.
+# sparse array case:
 """
-    nsteps = calculate_timestep(T, H0, Hunc_ops, maxpar [, Pmin = 40])
+    nsteps = calculate_timestep(T, H0; Hsym_ops=[], Hanti_ops=[], Hunc_ops=[], maxSym=[], maxUnc=[], Pmin=40)
 
-Estimate the number of time steps needed for an accurate simulation, when there are no coupled controls
+Estimate the number of time steps needed for the simulation, when there are uncoupled controls.
  
 # Arguments
-- `T:: Float64`: Final simulation
-- `H0::Array{Float64,2}`: Time-independent part of the Hamiltonian matrix
-- `Hunc_ops:: Array{Float64,2}`: Array of uncoupled control Hamiltonians
-- `max_unc:: Array{Float64,1}`: Maximum parameter value for each subsystem (uncoupled)
-- `Pmin:: Int64`: Sample rate for accuracy (assuming a slowly varying Hamiltonian)
+- `T:: Float64`: Gate duration = Final simulation time
+- `H0::SparseMatrixCSC{Float64,Int64}`: Time-independent part of the Hamiltonian matrix
+- `Hsym_ops:: Vector{SparseMatrixCSC{Float64,Int64}}`: (Optional kw-arg) Array of symmetric control Hamiltonians
+- `Hanti_ops:: Vector{SparseMatrixCSC{Float64,Int64}}`: (Optional kw-arg) Array of anti-symmetric control Hamiltonians
+- `Hunc_ops:: Vector{SparseMatrixCSC{Float64,Int64}}`: (Optional kw-arg) Array of uncoupled control Hamiltonians
+- `maxCop:: Vector{Float64}`: (Optional kw-arg) Maximum control amplitude for each sym/anti-sym control Hamiltonian
+- `maxUnc:: Vector{Float64}`: (Optional kw-arg) Maximum control amplitude for each uncoupled control Hamiltonian
+- `Pmin:: Int64`: (Optional kw-arg) Number of time steps per shortest period (assuming a slowly varying Hamiltonian).
 """
-function calculate_timestep(T::Float64, H0::AbstractArray, Hunc_ops::AbstractArray, max_unc::Array{Float64,1}, Pmin::Int64 = 40)
-    K1 = copy(H0) 
-    Nunc = length(Hunc_ops)
+function calculate_timestep(T::Float64, H0::SparseMatrixCSC{Float64,Int64}; Hsym_ops::Vector{SparseMatrixCSC{Float64,Int64}}=SparseMatrixCSC{Float64,Int64}[], Hanti_ops::Vector{SparseMatrixCSC{Float64,Int64}}=SparseMatrixCSC{Float64,Int64}[], Hunc_ops::Vector{SparseMatrixCSC{Float64,Int64}}=SparseMatrixCSC{Float64,Int64}[], maxCop::Vector{Float64}=Float64[], maxUnc::Vector{Float64}=Float64[], Pmin::Int64=40)
 
+    Ncoupled = length(Hsym_ops)
+    Nunc = length(Hunc_ops)
+    @assert(length(maxCop)>= Ncoupled)
+    @assert(length(maxUnc)>= Nunc)
+
+    K1 = copy(H0) # system Hamiltonian
     # Typecasting issue for sparse arrays
     if(typeof(H0) == SparseMatrixCSC{Float64,Int64})
         K1 = SparseMatrixCSC{ComplexF64,Int64}(K1)
     end
 
+    # Coupled control Hamiltonians
+    for i = 1:Ncoupled
+        K1 += maxCop[i].*Hsym_ops[i] + 1im*maxCop[i].*Hanti_ops[i]
+    end
+
     # Uncoupled control Hamiltonians
     for i = 1:Nunc
         if(issymmetric(Hunc_ops[i]))
-            K1 = K1 .+ max_unc[i]*Hunc_ops[i]
+            K1 += maxUnc[i]*Hunc_ops[i]
         elseif(norm(Hunc_ops[i]+Hunc_ops[i]') < 1e-14)
-            K1 .+= 1im*max_unc[i].*Hunc_ops[i]
+            K1 += 1im*maxUnc[i].*Hunc_ops[i]
         else 
             throw(ArgumentError("Uncoupled Hamiltonians must currently be either symmetric or anti-symmetric.\n"))
         end
@@ -2328,22 +2483,107 @@ function calculate_timestep(T::Float64, H0::AbstractArray, Hunc_ops::AbstractArr
     return nsteps
 end
 
-# Preallocate K and S matrices
-function KS_alloc(params)
-    Ntot = prod(params.Nt)
+# # Function to estimate the number of time steps needed for the simulation. Only uncoupled controls.
+# """
+#     nsteps = calculate_timestep(T, H0, Hunc_ops, maxpar [, Pmin = 40])
+
+# Estimate the number of time steps needed for an accurate simulation, when there are no coupled controls
+ 
+# # Arguments
+# - `T:: Float64`: Final simulation
+# - `H0:: Matrix{Float64}`: Time-independent part of the Hamiltonian matrix
+# - `Hunc_ops:: Vector{Matrix{Float64}}`: Array of uncoupled control Hamiltonians
+# - `max_unc:: Vector{Float64}`: Maximum parameter value for each subsystem (uncoupled)
+# - `Pmin:: Int64`: Sample rate for accuracy (assuming a slowly varying Hamiltonian)
+# """
+# function calculate_timestep(T::Float64, H0::Matrix{Float64}, Hunc_ops::Vector{Matrix{Float64}}, max_unc::Vector{Float64}, Pmin::Int64 = 40)
+#     K1 = copy(H0) 
+#     Nunc = length(Hunc_ops)
+
+#     # Typecasting issue for sparse arrays
+#     if(typeof(H0) == SparseMatrixCSC{Float64,Int64})
+#         K1 = SparseMatrixCSC{ComplexF64,Int64}(K1)
+#     end
+
+#     # Uncoupled control Hamiltonians
+#     for i = 1:Nunc
+#         if(issymmetric(Hunc_ops[i]))
+#             K1 = K1 .+ max_unc[i]*Hunc_ops[i]
+#         elseif(norm(Hunc_ops[i]+Hunc_ops[i]') < 1e-14)
+#             K1 .+= 1im*max_unc[i].*Hunc_ops[i]
+#         else 
+#             throw(ArgumentError("Uncoupled Hamiltonians must currently be either symmetric or anti-symmetric.\n"))
+#         end
+#     end
+
+#     # Estimate time step
+#     lamb = eigvals(Array(K1))
+#     maxeig = maximum(abs.(lamb)) 
+#     mineig = minimum(abs.(lamb)) 
+
+#     samplerate1 = maxeig*Pmin/(2*pi)
+#     nsteps = ceil(Int64, T*samplerate1)
+
+#     # NOTE: The above estimate does not account for quickly varying signals or a large number of splines. 
+#     # Double check at least 2-3 points per spline to resolve control function.
+
+#     return nsteps
+# end
+
+# Preallocate K and S matrices (not used anymore)
+# function KS_alloc(params)
+#     Ntot = prod(params.Nt)
+#     # establish the non-zero pattern for sparse storage
+#     if typeof(params.Hconst) == SparseMatrixCSC{Float64, Int64}
+#         K0 = copy(params.Hconst)
+#         S0 = spzeros(size(params.Hconst,1),size(params.Hconst,2))
+#         for q=1:params.Ncoupled
+#             K0 += params.Hsym_ops[q]
+#             S0 += params.Hanti_ops[q]
+#         end
+#         for q=1:params.Nunc
+#             if(params.isSymm[q])
+#                 K0 = K0 + params.Hunc_ops[q]
+#             else
+#                 S0 = S0 + params.Hunc_ops[q]
+#             end
+#         end
+#         K05 = copy(K0)
+#         K1  = copy(K0)
+#         S05 = copy(S0)
+#         S1  = copy(S0)
+#     else
+#         K0   = zeros(Float64,Ntot,Ntot)
+#         S0   = zeros(Float64,Ntot,Ntot)
+#         K05  = zeros(Float64,Ntot,Ntot)
+#         S05  = zeros(Float64,Ntot,Ntot)
+#         K1   = zeros(Float64,Ntot,Ntot)
+#         S1   = zeros(Float64,Ntot,Ntot)
+#     end
+#     # vtargetr = real(params.Utarget)
+#     # vtargeti = imag(params.Utarget)
+#     #return K0,S0,K05,S05,K1,S1,vtargetr,vtargeti
+#     return K0,S0,K05,S05,K1,S1
+# end
+
+# Preallocate K and S matrices, not relying on params
+function ks_alloc(Ntot:: Int64, Hconst::MyRealMatrix, Hsym_ops::Vector{MyRealMatrix}, Hanti_ops::Vector{MyRealMatrix}, Hunc_ops::Vector{MyRealMatrix}, isSymm::BitArray{1})
+    # Ntot = prod(params.Nt)
     # establish the non-zero pattern for sparse storage
-    if typeof(params.Hconst) == SparseMatrixCSC{Float64, Int64}
-        K0 = copy(params.Hconst)
-        S0 = spzeros(size(params.Hconst,1),size(params.Hconst,2))
-        for q=1:params.Ncoupled
-            K0 += params.Hsym_ops[q]
-            S0 += params.Hanti_ops[q]
+    if typeof(Hconst) == SparseMatrixCSC{Float64, Int64}
+        K0 = copy(Hconst)
+        S0 = spzeros(size(Hconst,1),size(Hconst,2))
+        Ncoupled = length(Hsym_ops)
+        for q=1:Ncoupled
+            K0 += Hsym_ops[q]
+            S0 += Hanti_ops[q]
         end
-        for q=1:params.Nunc
-            if(params.isSymm[q])
-                K0 = K0 + params.Hunc_ops[q]
+        Nunc = length(Hunc_ops)
+        for q=1:Nunc
+            if(isSymm[q])
+                K0 = K0 + Hunc_ops[q]
             else
-                S0 = S0 + params.Hunc_ops[q]
+                S0 = S0 + Hunc_ops[q]
             end
         end
         K05 = copy(K0)
@@ -2365,7 +2605,7 @@ function KS_alloc(params)
 end
 
 # Working arrays for timestepping
-function time_step_alloc(Ntot::Int64,N::Int64)
+function time_step_alloc(Ntot::Int64, N::Int64)
     lambdar   = zeros(Float64,Ntot,N) 
     lambdar0  = zeros(Float64,Ntot,N) 
     lambdai   = zeros(Float64,Ntot,N) 
@@ -2404,60 +2644,99 @@ end
 
 # setup the initial conditions
 """
-    u_init = initial_cond(Ne, Ng)
+    u_init = initial_cond(Ne, Ng, msb_order=true)
 
 Setup a basis of canonical unit vectors that span the essential Hilbert space, setting all guard levels to zero
  
 # Arguments
 - `Ne:: Array{Int64}`: Array holding the number of essential levels in each system
 - `Ng:: Array{Int64}`: Array holding the number of guard levels in each system
+- `msb_order:: Bool`: Most Significant Bit (MSB) ordering: true
 """
-function initial_cond(Ne, Ng)
+function initial_cond(Ne::Vector{Int64}, Ng::Vector{Int64}, msb_order::Bool = true)
     Nt = Ne + Ng
     Ntot = prod(Nt)
+    @assert length(Nt) <= 3 "ERROR: initial_cond(): only length(Nt) <= 3 is implemented"
+    NgTot = sum(Ng)
     N = prod(Ne)
     Ident = Matrix{Float64}(I, Ntot, Ntot)
     U0 = Ident[1:Ntot,1:N] # initial guess
 
     #adjust initial guess if there are ghost points
-    if length(Nt) == 3
-        if Ng[1]+Ng[2]+Ng[3] > 0
-            col = 0
-            m = 0
-            for k3 in 1:Nt[3]
+    if msb_order
+        if length(Nt) == 3
+            if NgTot > 0
+                col = 0
+                m = 0
+                for k3 in 1:Nt[3]
+                    for k2 in 1:Nt[2]
+                        for k1 in 1:Nt[1]
+                            m += 1
+                            # is this a guard level?
+                            guard = (k1 > Ne[1]) || (k2 > Ne[2]) || (k3 > Ne[3])
+                            if !guard
+                                col = col+1
+                                U0[:,col] = Ident[:,m]
+                            end # if ! guard
+                        end #for
+                    end # for
+                end # for            
+            end # if  
+        elseif length(Nt) == 2
+            if NgTot > 0
+                # build up a basis for the essential states
+                col = 0
+                m = 0
                 for k2 in 1:Nt[2]
                     for k1 in 1:Nt[1]
                         m += 1
                         # is this a guard level?
-                        guard = (k1 > Ne[1]) || (k2 > Ne[2]) || (k3 > Ne[3])
+                        guard = (k1 > Ne[1]) || (k2 > Ne[2])
                         if !guard
-                            col = col+1
+                            col += 1
                             U0[:,col] = Ident[:,m]
                         end # if ! guard
-                    end #for
+                    end # for
                 end # for
-            end # for            
-        end # if  
-    elseif length(Nt) == 2
-        if Ng[1] + Ng[2] > 0
-            Nt = Ne + Ng
-            # build up a basis for the essential states
-            col = 0
-            m = 0
-            for k2 in 1:Nt[2]
+            end # if
+        end
+    else
+        if length(Nt) == 3
+            if NgTot > 0
+                col = 0
+                m = 0
                 for k1 in 1:Nt[1]
-                    m += 1
-                    # is this a guard level?
-                    guard = (k1 > Ne[1]) || (k2 > Ne[2])
-                    if !guard
-                        col += 1
-                        U0[:,col] = Ident[:,m]
-                    end # if ! guard
+                    for k2 in 1:Nt[2]
+                        for k3 in 1:Nt[3]    
+                            m += 1
+                            # is this a guard level?
+                            guard = (k1 > Ne[1]) || (k2 > Ne[2]) || (k3 > Ne[3])
+                            if !guard
+                                col = col+1
+                                U0[:,col] = Ident[:,m]
+                            end # if ! guard
+                        end #for
+                    end # for
+                end # for            
+            end # if  
+        elseif length(Nt) == 2
+            if NgTot > 0
+                # build up a basis for the essential states
+                col = 0
+                m = 0
+                for k1 in 1:Nt[1]
+                    for k2 in 1:Nt[2]
+                        m += 1
+                        # is this a guard level?
+                        guard = (k1 > Ne[1]) || (k2 > Ne[2])
+                        if !guard
+                            col += 1
+                            U0[:,col] = Ident[:,m]
+                        end # if ! guard
+                    end # for
                 end # for
-            end # for
-        end # if
-    elseif length(Nt) > 3
-        println("ERROR: initial_cond(): length(Nt) = ", length(Nt), " is not implemented")
+            end # if
+        end
     end
     return U0
 end
