@@ -433,7 +433,7 @@ function and/or gradient.
 - `verbose::Bool = false`: Run simulation with additional terminal output and store state history.
 - `evaladjoint::Bool = true`: Solve the adjoint equation and calculate the gradient of the objective function.
 """
-function traceobjgrad(pcof0::Array{Float64,1},  params::objparams, wa::Working_Arrays, verbose::Bool = false, evaladjoint::Bool = true)
+function traceobjgrad(pcof0::Array{Float64,1},  params::objparams, wa::Working_Arrays, verbose::Bool = false, evaladjoint::Bool = true; saveEveryNsteps::Int=1)
     order  = 2
     N      = params.N    
     Nguard = params.Nguard  
@@ -601,8 +601,8 @@ function traceobjgrad(pcof0::Array{Float64,1},  params::objparams, wa::Working_A
     gi   .= 0.0
     
     if verbose
-        usaver = zeros(Float64,Ntot,N,nsteps+1)
-        usavei = zeros(Float64,Ntot,N,nsteps+1)
+        usaver = zeros(Float64,Ntot,N,div(nsteps, saveEveryNsteps)+1)
+        usavei = zeros(Float64,Ntot,N,div(nsteps, saveEveryNsteps)+1)
         usaver[:,:,1] = vr # the rotation to the lab frame is the identity at t=0
         usavei[:,:,1] = -vi
 
@@ -673,10 +673,10 @@ function traceobjgrad(pcof0::Array{Float64,1},  params::objparams, wa::Working_A
             end  # evaladjoint && verbose
         end # Stromer-Verlet
         
-        if verbose
+        if verbose && ((step % saveEveryNsteps == 0))
             # rotated frame
-            usaver[:,:, step + 1] = vr
-            usavei[:,:, step + 1] = -vi
+            usaver[:,:, div(step, saveEveryNsteps) + 1] = vr
+            usavei[:,:, div(step, saveEveryNsteps) + 1] = -vi
         end
     end #forward time stepping loop
 
@@ -899,7 +899,7 @@ if verbose
         end
     end
     
-    nlast = 1 + nsteps
+    nlast = 1 + div(nsteps, saveEveryNsteps)
     println("Unitary test 1, error in length of propagated state vectors:")
     println("Col |   (1 - |psi|)")
     Vnrm ::Float64 = 0.0
@@ -2461,3 +2461,4 @@ function initial_cond(Ne, Ng)
     end
     return U0
 end
+
