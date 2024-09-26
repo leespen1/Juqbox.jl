@@ -111,6 +111,7 @@ mutable struct objparams
     primaryHist   ::Array{Float64,1}
     secondaryHist ::Array{Float64,1}
     dualInfidelityHist  ::Array{Float64,1}
+    timeHist      ::Array{Float64,1}
 
     #Linear solver object to solve linear system in timestepping
     linear_solver ::lsolver_object
@@ -313,7 +314,7 @@ mutable struct objparams
              forb_states, forb_weights, wmat_real, wmat_imag, pFidType, 0.0,
              objFuncType, leak_ubound,
              0.0,0.0,zeros(0),zeros(0),zeros(0),saveConvHist,
-             zeros(0), zeros(0), zeros(0), zeros(0), 
+             zeros(0), zeros(0), zeros(0), zeros(0), zeros(0),
              linear_solver, objThreshold, traceInfidelityThreshold, 0.0, 0.0, 
              usingPriorCoeffs, priorCoeffs, quiet, Rfreq, false, [],
              real(my_dVds), imag(my_dVds), my_sv_type

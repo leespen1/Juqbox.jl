@@ -18,6 +18,18 @@
     
 # end #opt_params struct
 
+# Wrappers for easy parameter adding
+function genericAddOption(ipopt_prob, option, value::String)
+    Ipopt.AddIpoptStrOption(ipopt_prob, option, value)
+end
+
+function genericAddOption(ipopt_prob, option, value::Int)
+    Ipopt.AddIpoptIntOption(ipopt_prob, option, value)
+end
+
+function genericAddOption(ipopt_prob, option, value::Number)
+    Ipopt.AddIpoptNumOption(ipopt_prob, option, value)
+end
 
 
 
@@ -220,11 +232,16 @@ function intermediate_par(
     ls_trials::Union{Int32,Int64},
     params:: Juqbox.objparams)
   # ...
+    cpu_time = time()
+    #println("$iter_count,\t$obj_value\t$cpu_time")
+    #println("iter: $iter_count, obj: $obj_value, cpu_time: $cpu_time")
+
     if params.saveConvHist 
         push!(params.objHist, obj_value)
         push!(params.dualInfidelityHist, inf_du)
         push!(params.primaryHist, params.lastTraceInfidelity)
         push!(params.secondaryHist,  params.lastLeakIntegral)
+        push!(params.timeHist, cpu_time)
     end
     if obj_value < params.objThreshold
         println("Stopping because objective value = ", obj_value,
@@ -270,7 +287,8 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
                              acceptTol:: Float64=1e-5, acceptIter:: Int64=15,
                              nodes::AbstractArray=[0.0], 
                              weights::AbstractArray=[1.0],
-                             jacob_approx::String="exact")
+                             jacob_approx::String="exact",
+                             print_level=5)
 
 
     #Initialize the last fidelity and leak terms and gradients
@@ -345,6 +363,7 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
             addOption( prob, "warm_start_bound_frac", 1e-16)
             addOption( prob, "warm_start_slack_bound_frac", 1e-16)
             addOption( prob, "warm_start_slack_bound_push", 1e-16)
+            addOption( prob, "print_timing_statistics", "yes")
 
             if !params.quiet
                 println("Ipopt: Enabling warm start option")
@@ -358,6 +377,7 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
         AddIpoptNumOption( prob, "acceptable_tol", acceptTol);
         AddIpoptIntOption( prob, "acceptable_iter", acceptIter);
         AddIpoptStrOption( prob, "jacobian_approximation", jacob_approx);
+        AddIpoptStrOption( prob, "print_timing_statistics", "yes")
         # AddIpoptStrOption( prob, "derivative_test", "first-order");
         # AddIpoptNumOption( prob, "derivative_test_tol", 1.0e-4);
         # AddIpoptNumOption( prob, "derivative_test_perturbation", 1.0e-8);
@@ -380,6 +400,7 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
             end
         end        
     end
+    AddIpoptIntOption( prob, "print_level", print_level);
 
     # intermediate callback function
     if @isdefined setIntermediateCallback
@@ -410,7 +431,7 @@ Call IPOPT to  optimizize the control functions.
 - `pcof0:: Array{Float64, 1}`: Initial guess for the parameter values
 - `baseName:: String`: Name of file for saving the optimized parameters; extension ".jld2" is appended
 """
-function run_optimizer(prob:: IpoptProblem, pcof0:: Array{Float64, 1}, baseName:: String="")
+function run_optimizer(prob:: IpoptProblem, pcof0:: Array{Float64, 1}, baseName:: String="", )
     # takes at most max_iter >= 0 iterations. Set with addOption(prob, "max_iter", nIter)
 
     # initial guess for IPOPT; make a copy of pcof0 to avoid overwriting it
