@@ -288,7 +288,8 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
                              nodes::AbstractArray=[0.0], 
                              weights::AbstractArray=[1.0],
                              jacob_approx::String="exact",
-                             print_level=5)
+                             print_level=5,
+                             max_cpu_time=60.0*60*8)
 
 
     #Initialize the last fidelity and leak terms and gradients
@@ -341,6 +342,8 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
         # prob = CreateIpoptProblem( nCoeff, minCoeff, maxCoeff, nconst, g_L, g_U, nEleJac, nEleHess, eval_f, eval_g, eval_grad_f, eval_jac_g,eval_h,expose_xnew=true);
         prob = CreateIpoptProblem( nCoeff, minCoeff, maxCoeff, nconst, g_L, g_U, nEleJac, nEleHess, eval_f, eval_g, eval_grad_f, eval_jac_g,eval_h);
     end
+
+    AddIpoptNumOption(prob, "max_cpu_time", max_cpu_time);
 
     if @isdefined addOption
         addOption( prob, "hessian_approximation", "limited-memory");
@@ -418,6 +421,7 @@ function setup_ipopt_problem(params:: Juqbox.objparams, wa::Working_Arrays, nCoe
         println("Ipopt parameters: accept # iter = ", acceptIter)
     end
     
+
     return prob
 end
 
