@@ -288,7 +288,7 @@ level in the simulation.
 """
 function identify_guard_levels(params::Juqbox.objparams, custom:: Int64 = 0)
     # identify all guard levels
-    Ntot = params.N+params.Nguard
+    Ntot = prod(params.Nt)
     guardlev = fill(false, Ntot)
 
     if params.Nosc == 1
@@ -333,7 +333,7 @@ at least one of its subsystems.
 """
 function identify_forbidden_levels(params:: Juqbox.objparams, custom::Int64 = 0)
     # identify all forbidden levels
-    Ntot = params.N+params.Nguard
+    Ntot = prod(params.Nt)
     Ng = params.Ng
     forbiddenlev = fill(false, Ntot)
 
@@ -373,7 +373,7 @@ end #identify_forbidden_levels
 
 function specify_level3(params:: Juqbox.objparams, Nl3:: Int64) # Nl3 is 0-based
     # identify all  levels
-    Ntot = params.N+params.Nguard
+    Ntot = prod(params.Nt)
     specifiedlev = fill(false, Ntot)
 
     if params.Nosc == 3
@@ -472,7 +472,7 @@ Plot the essential levels of the solution operator at a fixed time and return a 
 """
 function plot_final_unitary(final_unitary::Array{ComplexF64,2}, params::objparams, fid::Float64)
     Ness = params.N
-    Ntot = Ness + params.Nguard
+    Ntot = prod(params.Nt)
     println("plot_final_unitary: Ntot = ", Ntot, " Ness = ", Ness)
     
     Ufinal = zeros(ComplexF64, Ness, Ness)
@@ -510,7 +510,7 @@ Plot the evolution of the expected energy for each initial condition.
 function plot_energy(unitaryhistory::Array{ComplexF64,3}, params::objparams)
     Nosc =  params.Nosc
     Ness =  params.N
-    Ntot = Ness + params.Nguard
+    Ntot = prod(params.Nt)
     Nsteps = params.nsteps
 
     # evaluate the expected energy level in each system + std variation
