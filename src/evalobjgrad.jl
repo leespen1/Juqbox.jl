@@ -384,7 +384,7 @@ mutable struct Working_Arrays
 
     function Working_Arrays(params::objparams, nCoeff::Int64)
         N = params.N
-        Ntot = N + params.Nguard
+        Ntot = prod(params.Nt)
 
         # K0,S0,K05,S05,K1,S1,vtargetr,vtargeti = KS_alloc(params)
         K0,S0,K05,S05,K1,S1 = KS_alloc(params)
@@ -450,7 +450,7 @@ function traceobjgrad(pcof0::Array{Float64,1},  params::objparams, wa::Working_A
     Ne = params.Ne
     
     Nt   = params.Nt # vector
-    Ntot = N + Nguard # scalar
+    Ntot = prod(params.Nt) # scalar
 
     Ncoupled  = params.Ncoupled # Number of symmetric control Hamiltonians. We currently assume that the number of anti-symmetric Hamiltonians is the same
     Nunc  = params.Nunc # Number of uncoupled control functions.
@@ -971,7 +971,7 @@ Update the unitary target in the objparams object.
 - `new_Utarget::Array{ComplexF64,2}`: New unitary target as a two-dimensional complex-valued array (matrix) of dimension Ntot x N
 """
 function change_target!(params::objparams, new_Utarget::Array{ComplexF64,2} )
-    Ntot = params.N + params.Nguard
+    Ntot = prod(params.Nt)
     tz = ( Ntot, params.N )
     # Check size of new_Utarget
     @assert( size(new_Utarget) == tz)
@@ -1998,7 +1998,7 @@ function eval_forward(U0::Array{Float64,2}, pcof0::Array{Float64,1}, params::obj
 
     H0 = params.Hconst
 
-    Ntot = N + Nguard
+    Ntot = prod(params.Nt)
     pcof = pcof0
 
     # We have 2*Ncoupled ctrl functions
